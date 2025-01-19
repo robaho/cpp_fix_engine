@@ -23,6 +23,6 @@ The engine uses a thread per client in the server.
 
 Using a 4 GHz Quad-Core Intel Core i7:
 
-24k round-trip quote message + ack per second on localhost.
+40k round-trip quote messages (single double-sided qoute) + ack per second on localhost.
 
 Over-the-network timings coming soon.
