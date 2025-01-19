@@ -5,7 +5,17 @@
 #include "msg_massquote.h"
 #include <netdb.h>
 
-struct SessionConfig sessionConfig("CLIENT","SERVER");
+#define GO_TRADER
+
+#ifdef GO_TRADER
+static const char * TARGET_COMP_ID = "GOX"; // GOX to talk with go-trader, or SERVER to talk with sample_server
+static const int PORT = 5001; // 5001 to talk with go-trader, or 9000 to talk with sample_server
+#else
+static const char * TARGET_COMP_ID = "SERVER"; // GOX to talk with go-trader, or SERVER to talk with sample_server
+static const int PORT = 9000; // 5001 to talk with go-trader, or 9000 to talk with sample_server
+#endif
+
+struct SessionConfig sessionConfig("CLIENT",TARGET_COMP_ID);
 
 class MyClient : public Initiator {
   static const int N_QUOTES = 100000;
@@ -29,9 +39,14 @@ public:
   }
   void onMessage(Session &session, const FixMessage &msg) {
     if(msg.msgType()==MassQuoteAck::msgType) {
-        double adjust = rand() % 1 == 1 ? 1 : -1;
+        double adjust = rand() % 2 == 0 ? 0.01 : -0.01;
+
+        if (bidPrice <= 25) adjust = 0.01;
+        if (bidPrice >= 225) adjust = -0.01; 
+
         bidPrice = bidPrice + adjust;
         askPrice = askPrice + adjust;
+
         MassQuote::build(fix,symbol,bidPrice,bidQty,askPrice,askQty);
         sendMessage(MassQuote::msgType,fix);
         if(++quotes%100000==0) {
@@ -73,7 +88,7 @@ int main(int argc, char *argv[]) {
   }
 
   memcpy(&server.sin_addr, he->h_addr_list[0], he->h_length);
-  server.sin_port = htons(9000);
+  server.sin_port = htons(PORT);
   server.sin_family = AF_INET;
 
   MyClient client(server);

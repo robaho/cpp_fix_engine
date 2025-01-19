@@ -12,6 +12,7 @@ struct MassQuote {
         fix.addField(304,1);// total number of quote entries in the set across all messages
         fix.addField(295,1);// number of quote entries in this set
         fix.addField(299,"EntryID1");// number of quote entries in this set
+        fix.addField(55,symbol);
         fix.addField(132,bidPrice);
         fix.addField(133,offerPrice);
         fix.addField(134,bidQty);
