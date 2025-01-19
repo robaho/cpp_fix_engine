@@ -3,7 +3,7 @@
 This is a C++ implementation of a FIX protocol engine.
 
 **It is a WIP at the moment, but it is functional.** It is designed for ulta-high performance scenarios,
-so it won't support FIX message persistence/replay in the early iterators. All sequence numbers are reset to
+so it won't support FIX message persistence/replay in the early releases. All sequence numbers are reset to
 1 during connection.
 
 It uses [cpp_fixed](https://github.com/robaho/cpp_fixed) to perform fixed decimal point integer math.
