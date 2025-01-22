@@ -1,15 +1,17 @@
 CXX = clang++
-# CXXFLAGS = -std=c++20 -O0 -Wall -fsanitize=address -fno-omit-frame-pointer -pedantic-errors -g -I include
-# CXXFLAGS = -std=c++20 -Wall -pedantic-errors -g -I include
-CXXFLAGS = -std=c++20 -O3 -Wall -pedantic-errors -g -I include
-# CXXFLAGS = -std=c++20 -O3 -fprofile-generate -Wall -pedantic-errors -g -I include
-# CXXFLAGS = -std=c++20 -O3 -fprofile-use=default.profdata -Wall -pedantic-errors -g -I include
+INCLUDES = -I ../cpp_fix_codec
+
+# CXXFLAGS = -std=c++20 -O0 -Wall -fsanitize=address -fno-omit-frame-pointer -pedantic-errors -g ${INCLUDES}
+# CXXFLAGS = -std=c++20 -Wall -pedantic-errors -g ${INCLUDES}
+CXXFLAGS = -std=c++20 -O3 -Wall -pedantic-errors -g ${INCLUDES}
+# CXXFLAGS = -std=c++20 -O3 -fprofile-generate -Wall -pedantic-errors -g ${INCLUDES}
+# CXXFLAGS = -std=c++20 -O3 -fprofile-use=default.profdata -Wall -pedantic-errors -g ${INCLUDES}
 
 TEST_SRCS = ${wildcard *_test.cpp}
 TEST_OBJS = $(addprefix bin/, $(TEST_SRCS:.cpp=.o))
 TEST_MAINS = $(addprefix bin/, $(TEST_SRCS:.cpp=))
 
-HEADERS = ${wildcard *.h} cpp_fix_codec/fix.h
+HEADERS = ${wildcard *.h}
 
 SRCS = fix_engine.cpp
 
@@ -25,7 +27,7 @@ MAIN = bin/sample_server
 MAIN_OBJ = ${basename ${MAIN}}.o
 
 LIB = bin/fix_engine.a
-FIX_CODEC = cpp_fix_codec/bin/fix.a
+FIX_CODEC = ../cpp_fix_codec/bin/fix_codec.a
 
 cpp_fix_codec/fix.h:
 	git clone https://github.com/robaho/cpp_fix_codec
@@ -35,7 +37,7 @@ ${FIX_CODEC}:
 
 .PRECIOUS: bin/%.o
 
-all: ${MAIN} ${SAMPLE_SERVER} ${SAMPLE_CLIENT} $(TEST_MAINS) ${LIB} fixlib
+all: ${MAIN} ${SAMPLE_SERVER} ${SAMPLE_CLIENT} $(TEST_MAINS) ${LIB}
 	@echo compile finished
 
 test: ${TEST_MAINS}
@@ -66,10 +68,7 @@ bin/%.o: %.cpp ${HEADERS}
 
 clean:
 	rm -rf bin *~.
-	rm -rf cpp_fix_codec
 
-fixlib:
-	cd cpp_fix_codec && git pull && make -f Makefile all -j8
 
 
 

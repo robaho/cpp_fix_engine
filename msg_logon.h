@@ -1,4 +1,4 @@
-#include "cpp_fix_codec/fix_builder.h"
+#include "fix_builder.h"
 
 struct Logon {
     constexpr const static char * msgType = "A";

@@ -8,7 +8,7 @@
 #include <string>
 #include <thread>
 
-#include "cpp_fix_codec/fix.h"
+#include "fix.h"
 #include "msg_logon.h"
 #include "msg_logout.h"
 #include "socketbuf.h"

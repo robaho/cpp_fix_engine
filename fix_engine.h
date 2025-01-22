@@ -7,8 +7,8 @@
 #include <string>
 #include <thread>
 
-#include "cpp_fix_codec/fix_builder.h"
-#include "cpp_fix_codec/fix_parser.h"
+#include "fix_builder.h"
+#include "fix_parser.h"
 
 class Session;
 

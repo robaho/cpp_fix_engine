@@ -1,6 +1,5 @@
-#include "cpp_fix_codec/fix.h"
-#include "cpp_fix_codec/fix_builder.h"
-#include "cpp_fix_codec/fixed.h"
+#include "fix_builder.h"
+#include "fixed.h"
 
 struct MassQuote {
     constexpr const static char * msgType = "i";
