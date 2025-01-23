@@ -1,5 +1,5 @@
 CXX = clang++
-INCLUDES = -I ../cpp_fix_codec
+INCLUDES = -I ../cpp_fix_codec -I ../cpp_fixed
 
 # CXXFLAGS = -std=c++20 -O0 -Wall -fsanitize=address -fno-omit-frame-pointer -pedantic-errors -g ${INCLUDES}
 # CXXFLAGS = -std=c++20 -Wall -pedantic-errors -g ${INCLUDES}
@@ -29,12 +29,6 @@ MAIN_OBJ = ${basename ${MAIN}}.o
 LIB = bin/fix_engine.a
 FIX_CODEC = ../cpp_fix_codec/bin/fix_codec.a
 
-cpp_fix_codec/fix.h:
-	git clone https://github.com/robaho/cpp_fix_codec
-
-${FIX_CODEC}:
-	cd cpp_fix_codec && make -f Makefile all -j8
-
 .PRECIOUS: bin/%.o
 
 all: ${MAIN} ${SAMPLE_SERVER} ${SAMPLE_CLIENT} $(TEST_MAINS) ${LIB}
@@ -59,8 +53,8 @@ ${SAMPLE_SERVER}: ${SAMPLE_SERVER_OBJ} ${LIB} ${FIX_CODEC}
 ${SAMPLE_CLIENT}: ${SAMPLE_CLIENT_OBJ} ${LIB} ${FIX_CODEC}
 	${CXX} ${CXXFLAGS} ${SAMPLE_CLIENT_OBJ} ${LIB} ${FIX_CODEC} -o ${SAMPLE_CLIENT}
 
-bin/%_test: bin/%_test.o ${LIB}
-	${CXX} ${CXXFLAGS} $@.o ${LIB} -o $@ 
+bin/%_test: bin/%_test.o ${LIB} ${FIX_CODEC}
+	${CXX} ${CXXFLAGS} $@.o ${LIB} ${FIX_CODEC} -o $@ 
 
 bin/%.o: %.cpp ${HEADERS}
 	@ mkdir -p bin
