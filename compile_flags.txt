@@ -3,4 +3,6 @@
 .
 -I
 ../cpp_fix_codec
+-I
+../cpp_fixed
 --language=c++

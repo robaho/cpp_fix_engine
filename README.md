@@ -19,6 +19,10 @@ The project builds by default using `make` and CLang. There is a `Makefile.gcc` 
 
 The engine uses a thread per client in the server.
 
+## Errata
+
+The fix messages declared in the project are samples for demonstration purposes. A system would need to build/parse messages according to the providers specifications.
+
 ## Performance
 
 Using a 4 GHz Quad-Core Intel Core i7:

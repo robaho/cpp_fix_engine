@@ -48,7 +48,7 @@ class MyClient : public Initiator {
             bidPrice = bidPrice + adjust;
             askPrice = askPrice + adjust;
 
-            MassQuote::build(fix, symbol, bidPrice, bidQty, askPrice, askQty);
+            MassQuote::build(fix, "MyQuote", "MyQuoteEntry",symbol, bidPrice, bidQty, askPrice, askQty);
             sendMessage(MassQuote::msgType, fix);
             if (++quotes % 100000 == 0) {
                 auto end = std::chrono::system_clock::now();
@@ -68,7 +68,7 @@ class MyClient : public Initiator {
         std::cout << "client logged in!\n";
 
         start = std::chrono::system_clock::now();
-        MassQuote::build(fix, symbol, bidPrice, bidQty, askPrice, askQty);
+        MassQuote::build(fix, "MyQuote","MyQuoteEntry",symbol, bidPrice, bidQty, askPrice, askQty);
         sendMessage(MassQuote::msgType, fix);
     }
     void onLoggedOut(const Session &session, const std::string_view &text) {
