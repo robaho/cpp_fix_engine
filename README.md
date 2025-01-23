@@ -2,7 +2,7 @@
 
 This is a C++ implementation of a FIX protocol engine.
 
-**It is a WIP at the moment, but it is functional.** It is designed for ulta-high performance scenarios,
+**With the addition of some important test cases this has moved closer to production ready but it still under active development.** It is designed for ulta-high performance scenarios,
 so it won't support FIX message persistence/replay in the early releases. All sequence numbers are reset to
 1 during connection.
 
