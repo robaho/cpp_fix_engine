@@ -6,7 +6,7 @@
 #include "msg_logon.h"
 #include "msg_massquote.h"
 
-// #define GO_TRADER
+#define GO_TRADER
 
 #ifdef GO_TRADER
 static const char *TARGET_COMP_ID = "GOX";  // GOX to talk with go-trader, or SERVER to talk with sample_server
@@ -15,8 +15,6 @@ static const int PORT = 5001;               // 5001 to talk with go-trader, or 9
 static const char *TARGET_COMP_ID = "SERVER";  // GOX to talk with go-trader, or SERVER to talk with sample_server
 static const int PORT = 9000;                  // 5001 to talk with go-trader, or 9000 to talk with sample_server
 #endif
-
-struct SessionConfig sessionConfig("CLIENT", TARGET_COMP_ID);
 
 class MyClient : public Initiator {
     static const int N_QUOTES = 100000;
@@ -32,7 +30,7 @@ class MyClient : public Initiator {
     std::chrono::time_point<std::chrono::system_clock> start;
 
    public:
-    MyClient(sockaddr_in &server,std::string symbol) : Initiator(server, sessionConfig), symbol(symbol) {};
+    MyClient(sockaddr_in &server,std::string symbol,SessionConfig sessionConfig) : Initiator(server, sessionConfig), symbol(symbol) {};
     void onConnected() {
         std::cout << "client connected!, sending logon\n";
         Logon::build(fix);
@@ -105,7 +103,9 @@ int main(int argc, char *argv[]) {
     server.sin_port = htons(PORT);
     server.sin_family = AF_INET;
 
-    MyClient client(server,symbol);
+    struct SessionConfig sessionConfig("CLIENT_"+symbol, TARGET_COMP_ID);
+
+    MyClient client(server,symbol,sessionConfig);
     client.connect();
     client.handle();
 }

@@ -10,7 +10,7 @@ cleanup() {
 }
 
 bin/sample_client localhost IBM &
-bin/sample_client localhost MSFT &
+bin/sample_client localhost FB &
 bin/sample_client localhost GOOG &
 bin/sample_client localhost AMZN &
 bin/sample_client localhost ORCL &
