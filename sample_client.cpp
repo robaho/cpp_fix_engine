@@ -27,12 +27,12 @@ class MyClient : public Initiator {
     F askPrice = 101.0;
     F bidQty = 10;
     F askQty = 10;
-    std::string symbol = "IBM";
+    std::string symbol;
     long quotes = 0;
     std::chrono::time_point<std::chrono::system_clock> start;
 
    public:
-    MyClient(sockaddr_in &server) : Initiator(server, sessionConfig) {};
+    MyClient(sockaddr_in &server,std::string symbol) : Initiator(server, sessionConfig), symbol(symbol) {};
     void onConnected() {
         std::cout << "client connected!, sending logon\n";
         Logon::build(fix);
@@ -55,7 +55,7 @@ class MyClient : public Initiator {
                 auto duration =
                     std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
-                std::cout << "round-trip " << N_QUOTES << " quotes, usec per quote "
+                std::cout << "round-trip " << N_QUOTES << " " << symbol << " quotes, usec per quote "
                           << (duration.count() / (double)(N_QUOTES)) << ", quotes per sec "
                           << (int)(((N_QUOTES) / (duration.count() / 1000000.0))) << "\n";
 
@@ -80,9 +80,19 @@ int main(int argc, char *argv[]) {
     struct hostent *he;
     struct sockaddr_in server;
 
+    std::string symbol = "IBM";
+
+    if(argc > 1 && strcmp(argv[1],"-h")==0) {
+        std::cout << "usage: " << argv[0] << " [hostname] [symbol]\n";
+        exit(0);
+    }
+
     const char *hostname = "localhost";
     if (argc > 1) {
         hostname = argv[1];
+    }
+    if(argc > 2) {
+        symbol = argv[2];
     }
 
     /* resolve hostname */
@@ -95,7 +105,7 @@ int main(int argc, char *argv[]) {
     server.sin_port = htons(PORT);
     server.sin_family = AF_INET;
 
-    MyClient client(server);
+    MyClient client(server,symbol);
     client.connect();
     client.handle();
 }
