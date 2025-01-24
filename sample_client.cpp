@@ -6,7 +6,7 @@
 #include "msg_logon.h"
 #include "msg_massquote.h"
 
-#define GO_TRADER
+// #define GO_TRADER
 
 #ifdef GO_TRADER
 static const char *TARGET_COMP_ID = "GOX";  // GOX to talk with go-trader, or SERVER to talk with sample_server
