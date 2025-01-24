@@ -12,7 +12,7 @@
 
 class Session;
 
-struct MessageHandler {
+struct SessionHandler {
     virtual void onMessage(Session& session, const FixMessage& msg) = 0;
     virtual bool validateLogon(const FixMessage& logon) = 0;
     virtual void onDisconnected(const Session& session) = 0;
@@ -65,25 +65,25 @@ class Acceptor;
 class Session {
     friend class Acceptor;
     friend class Initiator;
-    bool loggedIn;
+    bool loggedIn=false;
     const int socket;
     void handle();
     FixBuilder fullMsg;
-    MessageHandler* handler;
+    SessionHandler& handler;
     std::mutex lock;
     // thread is owned by the session and reads the socket via handle()
     std::thread* thread = nullptr;
     
 protected:
     SessionConfig config;
-    Session(int socket, MessageHandler* handler, SessionConfig config) : socket(socket), handler(handler), config(config) {}
+    Session(int socket, SessionHandler& handler, SessionConfig config) : socket(socket), handler(handler), config(config) {}
 
     struct DisconnectHandler {
         Session &session;
-        MessageHandler* handler;
-        DisconnectHandler(Session &session, MessageHandler* handler) : session(session), handler(handler) {}
+        SessionHandler& handler;
+        DisconnectHandler(Session &session, SessionHandler& handler) : session(session), handler(handler) {}
         ~DisconnectHandler() {
-            handler->onDisconnected(session);
+            handler.onDisconnected(session);
         }
     };
 
@@ -105,7 +105,7 @@ protected:
     }
 };
 
-class Acceptor : public MessageHandler {
+class Acceptor : public SessionHandler {
     const int port;
     int serverSocket;
     std::shared_mutex sessionLock;
@@ -147,7 +147,7 @@ class Acceptor : public MessageHandler {
     }
 };
 
-class Initiator : public MessageHandler {
+class Initiator : public SessionHandler {
     int socket;
     bool connected = false;
     const sockaddr_in server;

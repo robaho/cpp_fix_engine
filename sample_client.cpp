@@ -34,7 +34,7 @@ class MyClient : public Initiator {
    public:
     MyClient(sockaddr_in &server) : Initiator(server, sessionConfig) {};
     void onConnected() {
-        std::cout << "client connected!\n";
+        std::cout << "client connected!, sending logon\n";
         Logon::build(fix);
         sendMessage(Logon::msgType, fix);
     }

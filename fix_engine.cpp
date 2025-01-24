@@ -58,7 +58,7 @@ void Acceptor::listen() {
             std::cout << "connection from " << ip_str << " port " << ntohs(clientAddr.sin_port) << "\n";
             try {
                 onConnected(clientAddr);
-                auto session = new Session(clientSocket, this, config);
+                auto session = new Session(clientSocket, *this, config);
                 auto thread = new std::thread(&Session::handle, session);
                 session->thread = thread;
                 threads.push_back(thread);
@@ -118,7 +118,7 @@ void Session::handle() {
             }
 
             if (!loggedIn) {
-                if (!handler->validateLogon((msg))) {
+                if (!handler.validateLogon((msg))) {
                     std::cerr << "logon rejected\n";
                     Logout::build(out, "invalid logon");
                     sendMessage(Logout::msgType, out);
@@ -127,9 +127,9 @@ void Session::handle() {
                 Logon::build(out);
                 sendMessage(Logon::msgType, out);
                 loggedIn = true;
-                handler->onLoggedOn(*this);
+                handler.onLoggedOn(*this);
             }
-            handler->onMessage(*this, msg);
+            handler.onMessage(*this, msg);
             config.expectedSeqNum++;
         }
     } catch (const std::runtime_error &err) {
@@ -148,7 +148,7 @@ void Initiator::connect() {
         perror("socket connect");
         return;
     }
-    session = new Session(socket, this, config);
+    session = new Session(socket, *this, config);
     connected=true;
     onConnected();
 }
