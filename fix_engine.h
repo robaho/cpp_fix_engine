@@ -19,22 +19,6 @@ struct SessionHandler {
     virtual void onLoggedOn(const Session& session) = 0;
 };
 
-struct SessionId {
-    const std::string& senderCompId;
-    const std::string& targetCompId;
-    SessionId(const std::string& senderCompId, const std::string& targetCompId) : senderCompId(senderCompId), targetCompId(targetCompId) {}
-    bool operator<(const SessionId& other) const {
-        return senderCompId < other.senderCompId || (senderCompId == other.senderCompId && targetCompId < other.targetCompId);
-    }
-    operator std::string() const {
-        return senderCompId + ":" + targetCompId;
-    }
-};
-
-inline std::ostream& operator<<(std::ostream& os, const SessionId& config) {
-    return os << "[" << config.senderCompId << "," << config.targetCompId << "]";
-}
-
 struct SessionConfig {
     std::string beginString = "FIX.4.4";
     std::string senderCompId;
@@ -46,18 +30,18 @@ struct SessionConfig {
 
     // initialize header fields, except 8,9,35
     virtual void initialize(FixBuilder& msg) {
-        msg.addField(49, senderCompId);
-        msg.addField(56, targetCompId);
-        msg.addField(34, nextSeqNum++);
+        msg.addField(Tag::SENDER_COMP_ID, senderCompId);
+        msg.addField(Tag::TARGET_COMP_ID, targetCompId);
+        msg.addField(Tag::SEQ_NUM, nextSeqNum++);
     }
 
-    SessionId id() const {
-        return SessionId(senderCompId, targetCompId);
+    std::string id() const {
+        return senderCompId+":"+targetCompId;
     }
 };
 
 inline std::ostream& operator<<(std::ostream& os, const SessionConfig& config) {
-    return os << "[" << config.id() << "]";
+    return os << "[" << config.id() << " seq " << config.nextSeqNum << "]";
 }
 
 class Acceptor;
@@ -109,7 +93,7 @@ class Acceptor : public SessionHandler {
     const int port;
     int serverSocket;
     std::shared_mutex sessionLock;
-    std::map<SessionId, Session*> sessionMap;
+    std::map<std::string, Session*> sessionMap;
     std::vector<std::thread*> threads;
     SessionConfig config;
     void put(Session* session) {
@@ -122,16 +106,16 @@ class Acceptor : public SessionHandler {
     Acceptor(int port, SessionConfig config) : port(port), config(config) {}
     // The message should be sent should not contain any of the header or trailer fields.
     // The msg is automatically reset.
-    void sendMessage(const SessionId& id, const std::string& msgType, FixBuilder& msg) {
+    void sendMessage(const std::string& sessionId, const std::string& msgType, FixBuilder& msg) {
         Session* session;
         {
             std::shared_lock<std::shared_mutex> mu(sessionLock);
-            session = sessionMap[id];
+            session = sessionMap[sessionId];
         }
         if (session != nullptr) {
             session->sendMessage(msgType, msg);
         } else {
-            std::cerr << "Session not found for " << id << "\n";
+            std::cerr << "Session not found for " << sessionId << "\n";
         }
     }
     virtual void onConnected(struct sockaddr_in remote) {}
