@@ -97,7 +97,7 @@ void Session::handle() {
                 sendMessage(Logout::msgType, out);
                 return;
             }
-            auto targetCompId = msg.getString(tagValue(Tags::TARGET_COMP_ID));
+            auto targetCompId = msg.getString(Tag::TARGET_COMP_ID);
             if (targetCompId != config.senderCompId) {
                 std::cerr << "rejecting connection, invalid target comp id " << targetCompId << ", expected " << config.senderCompId << "\n";
                 Logout::build(out, "invalid target comp id");
@@ -105,7 +105,7 @@ void Session::handle() {
                 return;
             }
 
-            auto senderCompId = msg.getString(tagValue(Tags::SENDER_COMP_ID));
+            auto senderCompId = msg.getString(Tag::SENDER_COMP_ID);
             if (senderCompId != config.targetCompId) {
                 if (config.targetCompId == "*") {
                     config.targetCompId = senderCompId;

@@ -8,6 +8,7 @@
 
 // #define GO_TRADER
 
+namespace config {
 #ifdef GO_TRADER
 static const char *TARGET_COMP_ID = "GOX";  // GOX to talk with go-trader, or SERVER to talk with sample_server
 static const int PORT = 5001;               // 5001 to talk with go-trader, or 9000 to talk with sample_server
@@ -15,6 +16,7 @@ static const int PORT = 5001;               // 5001 to talk with go-trader, or 9
 static const char *TARGET_COMP_ID = "SERVER";  // GOX to talk with go-trader, or SERVER to talk with sample_server
 static const int PORT = 9000;                  // 5001 to talk with go-trader, or 9000 to talk with sample_server
 #endif
+}
 
 class MyClient : public Initiator {
     static const int N_QUOTES = 100000;
@@ -100,10 +102,10 @@ int main(int argc, char *argv[]) {
     }
 
     memcpy(&server.sin_addr, he->h_addr_list[0], he->h_length);
-    server.sin_port = htons(PORT);
+    server.sin_port = htons(config::PORT);
     server.sin_family = AF_INET;
 
-    struct SessionConfig sessionConfig("CLIENT_"+symbol, TARGET_COMP_ID);
+    struct SessionConfig sessionConfig("CLIENT_"+symbol, config::TARGET_COMP_ID);
 
     MyClient client(server,symbol,sessionConfig);
     client.connect();

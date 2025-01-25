@@ -6,7 +6,7 @@ enum class OrderType {
     Limit=2
 };
 
-enum class Side {
+enum class OrderSide {
     Buy=1,
     Sell=2
 };
@@ -29,7 +29,7 @@ enum class ExecType {
 
 struct NewOrderSingle {
     constexpr const static char * msgType = "D";
-    template <int nPlaces=7> static void build(FixBuilder& fix,const std::string_view& symbol,const OrderType& orderType,const Side& side, Fixed<nPlaces> price,Fixed<nPlaces> quantity,const std::string_view orderId) {
+    template <int nPlaces=7> static void build(FixBuilder& fix,const std::string_view& symbol,const OrderType& orderType,const OrderSide& side, Fixed<nPlaces> price,Fixed<nPlaces> quantity,const std::string_view orderId) {
         fix.addField(55,symbol);
         fix.addField(11,orderId);
         fix.addField(38,quantity);
@@ -39,9 +39,9 @@ struct NewOrderSingle {
     }
 };
 
-struct CancelOrder {
+struct OrderCancelRequest {
     constexpr const static char * msgType = "F";
-    template <int nPlaces=7> static void build(FixBuilder& fix,const std::string_view& symbol,const OrderType& orderType,const Side& side, Fixed<nPlaces> price,Fixed<nPlaces> quantity,const std::string_view orderId) {
+    template <int nPlaces=7> static void build(FixBuilder& fix,const std::string_view& symbol,const OrderType& orderType,const OrderSide& side, Fixed<nPlaces> price,Fixed<nPlaces> quantity,const std::string_view orderId) {
         fix.addField(55,symbol);
         fix.addField(11,orderId);
         fix.addField(41,orderId);
@@ -49,7 +49,7 @@ struct CancelOrder {
     }
 };
 
-struct CancelOrderReject {
+struct OrderCancelReject {
     constexpr const static char * msgType = "9";
     template <int nPlaces=7> static void build(FixBuilder& fix,const long exchangeId,const std::string_view orderId,const OrderStatus& status) {
         fix.addField(37,exchangeId);
@@ -62,7 +62,7 @@ struct CancelOrderReject {
 
 struct ExecutionReport {
     constexpr const static char * msgType = "b";
-    template <int nPlaces=7> static void build(FixBuilder& fix,const std::string_view& orderId,const std::string_view& symbol, const Side& side, Fixed<nPlaces> lastPrice,Fixed<nPlaces> lastQty,Fixed<nPlaces> cumQty,Fixed<nPlaces> avgPrice, Fixed<nPlaces> remaining,const long exchangeId,const ExecType& execType,const std::string_view& execId,const OrderStatus& status) {
+    template <int nPlaces=7> static void build(FixBuilder& fix,const std::string_view& orderId,const std::string_view& symbol, const OrderSide& side, Fixed<nPlaces> lastPrice,Fixed<nPlaces> lastQty,Fixed<nPlaces> cumQty,Fixed<nPlaces> avgPrice, Fixed<nPlaces> remaining,const long exchangeId,const ExecType& execType,const std::string_view& execId,const OrderStatus& status) {
         fix.addField(37,exchangeId);
         fix.addField(11,orderId);
         fix.addField(17,execId);
