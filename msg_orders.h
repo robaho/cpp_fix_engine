@@ -1,3 +1,4 @@
+#include <string>
 #include "fix_builder.h"
 #include "fixed.h"
 
@@ -5,6 +6,15 @@ enum class OrderType {
     Market=1,
     Limit=2
 };
+
+inline std::ostream& operator<< (std::ostream& os, OrderType ethertype)
+{
+    switch (ethertype)
+    {
+        case OrderType::Market : return os << "Market" ;
+        case OrderType::Limit : return os << "Limit" ;
+    };
+}
 
 enum class OrderSide {
     Buy=1,
@@ -20,11 +30,12 @@ enum class OrderStatus {
 };
 
 enum class ExecType {
-    New=0,
-    PartiallyFilled=1,
-    Filled=2,
-    Canceled=4,
-    Rejected=8
+    New='0',
+    PartiallyFilled='1',
+    Filled='2',
+    Canceled='4',
+    Rejected='8',
+    Status='I'
 };
 
 struct NewOrderSingle {
@@ -62,11 +73,11 @@ struct OrderCancelReject {
 
 struct ExecutionReport {
     constexpr const static char * msgType = "b";
-    template <int nPlaces=7> static void build(FixBuilder& fix,const std::string_view& orderId,const std::string_view& symbol, const OrderSide& side, Fixed<nPlaces> lastPrice,Fixed<nPlaces> lastQty,Fixed<nPlaces> cumQty,Fixed<nPlaces> avgPrice, Fixed<nPlaces> remaining,const long exchangeId,const ExecType& execType,const std::string_view& execId,const OrderStatus& status) {
+    template <int nPlaces=7> static void build(FixBuilder& fix,const std::string_view& orderId,const std::string_view& symbol, const OrderSide& side, Fixed<nPlaces> lastPrice,Fixed<nPlaces> lastQty,Fixed<nPlaces> cumQty,Fixed<nPlaces> avgPrice, Fixed<nPlaces> remaining,const long exchangeId,const ExecType& execType,const long execId,const OrderStatus& status) {
         fix.addField(37,exchangeId);
         fix.addField(11,orderId);
         fix.addField(17,execId);
-        fix.addField(20,int(execType));
+        fix.addField(20,char(execType));
         fix.addField(39,int(status));
         fix.addField(55,symbol);
         fix.addField(54,int(side));

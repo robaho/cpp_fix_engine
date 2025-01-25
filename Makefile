@@ -11,27 +11,21 @@ TEST_SRCS = ${wildcard *_test.cpp}
 TEST_OBJS = $(addprefix bin/, $(TEST_SRCS:.cpp=.o))
 TEST_MAINS = $(addprefix bin/, $(TEST_SRCS:.cpp=))
 
+SAMPLE_SRCS = ${wildcard sample_*.cpp}
+SAMPLE_OBJS = $(addprefix bin/, $(SAMPLE_SRCS:.cpp=.o))
+SAMPLE_MAINS = $(addprefix bin/, $(SAMPLE_SRCS:.cpp=))
+
 HEADERS = ${wildcard *.h}
 
 SRCS = fix_engine.cpp
-
 OBJS = $(addprefix bin/, $(SRCS:.cpp=.o))
-
-SAMPLE_SERVER = bin/sample_server
-SAMPLE_SERVER_OBJ = ${basename ${SAMPLE_SERVER}}.o
-
-SAMPLE_CLIENT = bin/sample_client
-SAMPLE_CLIENT_OBJ = ${basename ${SAMPLE_CLIENT}}.o
-
-MAIN = bin/sample_server
-MAIN_OBJ = ${basename ${MAIN}}.o
 
 LIB = bin/fix_engine.a
 FIX_CODEC = ../cpp_fix_codec/bin/fix_codec.a
 
 .PRECIOUS: bin/%.o
 
-all: ${MAIN} ${SAMPLE_SERVER} ${SAMPLE_CLIENT} $(TEST_MAINS) ${LIB}
+all: ${SAMPLE_MAINS} $(TEST_MAINS) ${LIB}
 	@echo compile finished
 
 test: ${TEST_MAINS}
@@ -44,14 +38,8 @@ run_tests: ${TEST_MAINS}
 ${LIB}: ${OBJS}
 	ar r ${LIB} ${OBJS}
 
-${MAIN}: ${MAIN_OBJ} ${LIB} ${FIX_CODEC}
-	${CXX} ${CXXFLAGS} ${MAIN_OBJ} ${LIB} ${FIX_CODEC} -o ${MAIN}
-
-${SAMPLE_SERVER}: ${SAMPLE_SERVER_OBJ} ${LIB} ${FIX_CODEC}
-	${CXX} ${CXXFLAGS} ${SAMPLE_SERVER_OBJ} ${LIB} ${FIX_CODEC} -o ${SAMPLE_SERVER}
-
-${SAMPLE_CLIENT}: ${SAMPLE_CLIENT_OBJ} ${LIB} ${FIX_CODEC}
-	${CXX} ${CXXFLAGS} ${SAMPLE_CLIENT_OBJ} ${LIB} ${FIX_CODEC} -o ${SAMPLE_CLIENT}
+${SAMPLE_MAINS}: ${SAMPLE_OBJS} ${LIB} ${FIX_CODEC}
+	${CXX} ${CXXFLAGS} $@.o ${LIB} ${FIX_CODEC} -o $@
 
 bin/%_test: bin/%_test.o ${LIB} ${FIX_CODEC}
 	${CXX} ${CXXFLAGS} $@.o ${LIB} ${FIX_CODEC} -o $@ 
