@@ -57,7 +57,8 @@ class MyClient : public Initiator {
 
                 std::cout << "round-trip " << N_QUOTES << " " << symbol << " quotes, usec per quote "
                           << (duration.count() / (double)(N_QUOTES)) << ", quotes per sec "
-                          << (int)(((N_QUOTES) / (duration.count() / 1000000.0))) << "\n";
+                          << (int)(((N_QUOTES) / (duration.count() / 1000000.0))) 
+                          << ", last spread " << bidPrice << "/" << askPrice << "\n";
 
                 start = std::chrono::system_clock::now();
             }
