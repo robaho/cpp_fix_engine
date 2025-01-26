@@ -1,6 +1,7 @@
 #include "fix_engine.h"
 
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 
 #include <iostream>
@@ -54,6 +55,11 @@ void Acceptor::listen() {
         if (clientSocket < 0) {
             std::cerr << "error accepting connection" << std::endl;
         } else {
+            int flag = 1;
+            if (setsockopt(clientSocket, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag)) < 0) {
+                perror("unable to set TCP_NODELAY");
+            }
+
             inet_ntop(AF_INET, &(clientAddr.sin_addr), ip_str, INET_ADDRSTRLEN);
             std::cout << "connection from " << ip_str << " port " << ntohs(clientAddr.sin_port) << "\n";
             try {
@@ -148,6 +154,11 @@ void Initiator::connect() {
         perror("socket connect");
         return;
     }
+    int flag = 1;
+    if (setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag)) < 0) {
+        perror("unable to set TCP_NODELAY");
+    }
+
     session = new Session(socket, *this, config);
     connected=true;
     onConnected();
