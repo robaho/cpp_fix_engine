@@ -1,5 +1,11 @@
 #!/bin/bash
 
+HOST=localhost
+
+if [ "$#" -eq 1 ]; then
+    HOST=$1
+fi
+
 trap 'cleanup' INT TERM
 
 cleanup() {
@@ -9,12 +15,12 @@ cleanup() {
     echo "Done."
 }
 
-bin/sample_client localhost IBM &
-bin/sample_client localhost FB &
-bin/sample_client localhost GOOG &
-bin/sample_client localhost AMZN &
-bin/sample_client localhost ORCL &
-bin/sample_client localhost NFLX &
-bin/sample_client localhost AAPL &
+bin/sample_client $HOST IBM &
+bin/sample_client $HOST FB &
+bin/sample_client $HOST GOOG &
+bin/sample_client $HOST AMZN &
+bin/sample_client $HOST ORCL &
+bin/sample_client $HOST NFLX &
+bin/sample_client $HOST AAPL &
 
 wait
