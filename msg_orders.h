@@ -52,8 +52,9 @@ struct NewOrderSingle {
 
 struct OrderCancelRequest {
     constexpr const static char * msgType = "F";
-    template <int nPlaces=7> static void build(FixBuilder& fix,const std::string_view& symbol,const OrderType& orderType,const OrderSide& side, Fixed<nPlaces> price,Fixed<nPlaces> quantity,const std::string_view orderId) {
+    template <int nPlaces=7> static void build(FixBuilder& fix,const long exchangeId,const std::string_view& symbol,const OrderType& orderType,const OrderSide& side, Fixed<nPlaces> price,Fixed<nPlaces> quantity,const std::string_view orderId) {
         fix.addField(55,symbol);
+        fix.addField(37,exchangeId);
         fix.addField(11,orderId);
         fix.addField(41,orderId);
         fix.addField(54,int(side));

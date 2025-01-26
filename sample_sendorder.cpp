@@ -31,6 +31,7 @@ class MyClient : public Initiator {
 
     FixBuilder fix;
     Config config;
+    long exchangeId;
 
    public:
     MyClient(sockaddr_in &server,SessionConfig sessionConfig,Config config) : Initiator(server, sessionConfig), config(config) {};
@@ -41,6 +42,7 @@ class MyClient : public Initiator {
     }
     void onMessage(Session &session, const FixMessage &msg) {
         if (msg.msgType() == ExecutionReport::msgType) {
+            exchangeId = msg.getLong(37);
             std::cout << "received execution report:" << msg << "\n";
             if(msg.getInt(Tag::ORD_STATUS)==int(OrderStatus::Filled)) {
                 std::cout << "status: order filled\n";
@@ -65,6 +67,11 @@ class MyClient : public Initiator {
     }
     void onLoggedOut(const Session &session, const std::string_view &text) {
         std::cout << "client logged out " << text << "\n";
+    }
+    void cancelOrder() {
+        std::cout << "sending cancel\n";
+        OrderCancelRequest::build<7>(fix, exchangeId, config.symbol, OrderType::Limit, OrderSide::Buy, config.price, config.quantity, "MyOrder");
+        sendMessage(OrderCancelRequest::msgType, fix);
     }
 };
 
@@ -103,6 +110,8 @@ int main(int argc, char *argv[]) {
         client.handle();
     });
 
+    bool cancelSent = false;
+
     auto start = std::chrono::system_clock::now();
     while(true) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
@@ -110,9 +119,10 @@ int main(int argc, char *argv[]) {
             break;
         }
         auto now = std::chrono::system_clock::now();
-        if(std::chrono::duration_cast<std::chrono::seconds>(now-start).count() > config.timeout_seconds) {
-            std::cout << "Timeout reached, disconnecting client\n";
-            client.disconnect();
+        if(!cancelSent && std::chrono::duration_cast<std::chrono::seconds>(now-start).count() > config.timeout_seconds) {
+            std::cout << "Timeout reached, sending cancel\n";
+            client.cancelOrder();
+            cancelSent = true;
             break;
         }
     }
