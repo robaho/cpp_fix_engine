@@ -3,10 +3,9 @@
 HOST=localhost
 COUNT=100
 
-if [ "$#" -eq 1 ]; then
+if [ "$#" -ge 1 ]; then
     HOST=$1
-fi
-if [ "$#" -eq 2 ]; then
+elif [ "$#" -eq 2 ]; then
     COUNT=$2
 fi
 
