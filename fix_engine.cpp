@@ -1,5 +1,3 @@
-#include "fix_engine.h"
-
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
@@ -10,6 +8,7 @@
 #include <thread>
 
 #include "fix.h"
+#include "fix_engine.h"
 #include "msg_logon.h"
 #include "msg_logout.h"
 #include "socketbuf.h"
@@ -40,13 +39,48 @@ void Acceptor::listen() {
         return;
     }
 
-    std::cout << "listening for connections... on port " << port << "\n";
+    typedef boost::fibers::buffered_channel<Session*> channel_t;
+
+    channel_t chan{2};
+
+    std::cout << "starting worker threads\n";
+
+    auto worker = std::thread(
+            [&chan]{
+                std::cout << "worker thread " << std::this_thread::get_id() << "\n";
+                boost::fibers::use_scheduling_algorithm<boost::fibers::algo::round_robin>();
+                // wait till all threads joining the work stealing have been registered
+                Session* session;
+                while(true) {
+                    if(chan.pop(session)!=boost::fibers::channel_op_status::success) {
+                        return;
+                    }
+                    auto fiber = new boost::fibers::fiber(&Session::handle, session);
+                    session->fiber = fiber;
+                    fiber->detach();
+                }
+            });
+
+    std::cout << "starting poller\n";
+    std::thread poller_thread([this]() {
+        while (true) {
+            try {
+                poller.poll();
+            } catch (std::runtime_error &err) {
+                std::cerr << "poller error: " << err.what() << "\n";
+                return;
+            }
+        }
+    });
+    poller_thread.detach();
+
+    std::cout << "listening for connections on port " << port<< "\n";
+    if (::listen(serverSocket, 5) < 0) {  // 5 is the backlog size
+        std::cerr << "error listening for connections" << std::endl;
+        return;
+    }
 
     while (true) {
-        if (::listen(serverSocket, 5) < 0) {  // 5 is the backlog size
-            std::cerr << "error listening for connections" << std::endl;
-            return;
-        }
         sockaddr_in clientAddr;
         socklen_t clientAddrLen = sizeof(clientAddr);
         char ip_str[INET_ADDRSTRLEN];
@@ -54,39 +88,57 @@ void Acceptor::listen() {
         int clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &clientAddrLen);
         if (clientSocket < 0) {
             std::cerr << "error accepting connection" << std::endl;
-        } else {
-            int flag = 1;
-            if (setsockopt(clientSocket, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag)) < 0) {
-                perror("unable to set TCP_NODELAY");
-            }
+            continue;
+        }
 
-            inet_ntop(AF_INET, &(clientAddr.sin_addr), ip_str, INET_ADDRSTRLEN);
-            std::cout << "connection from " << ip_str << " port " << ntohs(clientAddr.sin_port) << "\n";
-            try {
-                onConnected(clientAddr);
-                auto session = new Session(clientSocket, *this, config);
-                auto thread = new std::thread(&Session::handle, session);
-                session->thread = thread;
-                threads.push_back(thread);
-            } catch (std::runtime_error &err) {
-                std::cerr << "Acceptor refused connection: " << err.what() << "\n";
-            }
+        int flag = 1;
+        if (setsockopt(clientSocket, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag)) < 0) {
+            perror("unable to set TCP_NODELAY");
+        }
+
+        int flags = fcntl(clientSocket, F_GETFL, 0);
+        if(fcntl(clientSocket, F_SETFL, flags | O_NONBLOCK)<0) {
+            perror("unable to set O_NONBLOCK");
+            close(clientSocket);
+            continue;
+        }
+
+        inet_ntop(AF_INET, &(clientAddr.sin_addr), ip_str, INET_ADDRSTRLEN);
+        std::cout << "connection from " << ip_str << " port " << ntohs(clientAddr.sin_port) << " on thread " << std::this_thread::get_id()<< "\n";
+        try {
+            auto session = new Session(clientSocket, *this, config);
+            chan.push(session);
+
+            onConnected(clientAddr);
+            poller.add_socket(clientSocket, session, [](struct kevent &event, void *data) {
+                auto session = static_cast<Session *>(data);
+                if (event.flags & EV_EOF) {
+                    close(session->socket);
+                }
+                session->unpark();
+            });
+        } catch (std::runtime_error &err) {
+            std::cerr << "acceptor refused connection: " << err.what() << "\n";
         }
     }
     // wait for all sessions to finish
-    for(auto thread : threads) {
-        thread->join();
-        delete thread;
+    for(auto fiber : fibers) {
+        fiber->join();
+        delete fiber;
     }
+    worker.join();
+    poller.close();
+    poller_thread.join();
 }
 
 void Session::handle() {
     DisconnectHandler disconnectHandler(*this, handler);
-    Socketbuf sbuf(socket);
+    Socketbuf sbuf(socket,*this);
     std::istream is(&sbuf);
     FixMessage msg;
     FixBuilder out;
     try {
+        // std::cout << "handling session " << config << " on thread " << std::this_thread::get_id()<<"\n";
         while (true) {
             FixMessage::parse(is, msg, GroupDefs());
             if (is.eof()) return;
@@ -145,7 +197,7 @@ void Session::handle() {
     }
 }
 
-void Initiator::connect() {
+void Initiator::connect(bool nonBlocking,Poller *poller) {
     if ((socket = ::socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("socket failed");
         return;
@@ -160,12 +212,36 @@ void Initiator::connect() {
     }
 
     session = new Session(socket, *this, config);
+
+    if(nonBlocking) {
+        if(poller==nullptr) throw std::runtime_error("cannot use non-blocking without Poller instance");
+        int flags = fcntl(socket, F_GETFL, 0);
+        if(fcntl(socket, F_SETFL, flags | O_NONBLOCK)<0) {
+            perror("unable to set O_NONBLOCK");
+            close(socket);
+            return;
+        }
+        this->poller = poller;
+        poller->add_socket(socket, session, [](struct kevent &event, void *data) {
+            auto session = static_cast<Session *>(data);
+            if (event.flags & EV_EOF) {
+                close(session->socket);
+            }
+            session->unpark();
+        });
+    }
     connected=true;
     onConnected();
 }
 
-void Initiator::handle() {
-    session->handle();
+void Initiator::handle(bool nonBlocking) {
+    if(nonBlocking) {
+        auto fiber = new boost::fibers::fiber(&Session::handle, session);
+        session->fiber = fiber;
+        return;
+    } else {
+        session->handle();
+    }
 }
 
 void Initiator::disconnect() {

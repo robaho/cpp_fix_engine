@@ -2,13 +2,16 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 
+#include <boost/fiber/all.hpp>
 #include <mutex>
 #include <shared_mutex>
 #include <string>
-#include <thread>
 
 #include "fix_builder.h"
 #include "fix_parser.h"
+#include "park_unpark.h"
+#include "poller.h"
+#include "socketbuf.h"
 
 class Session;
 
@@ -36,7 +39,7 @@ struct SessionConfig {
     }
 
     std::string id() const {
-        return senderCompId+":"+targetCompId;
+        return senderCompId + ":" + targetCompId;
     }
 };
 
@@ -46,27 +49,30 @@ inline std::ostream& operator<<(std::ostream& os, const SessionConfig& config) {
 
 class Acceptor;
 
-class Session {
+class Session : ParkSupport {
     friend class Acceptor;
     friend class Initiator;
-    bool loggedIn=false;
+    bool loggedIn = false;
     const int socket;
     void handle();
     FixBuilder fullMsg;
     SessionHandler& handler;
     std::mutex lock;
     // thread is owned by the session and reads the socket via handle()
-    std::thread* thread = nullptr;
-    
-protected:
+    boost::fibers::fiber* fiber = nullptr;
+    Socketbuf sbuf;
+    std::ostream os;
+
+   protected:
     SessionConfig config;
-    Session(int socket, SessionHandler& handler, SessionConfig config) : socket(socket), handler(handler), config(config) {}
+    Session(int socket, SessionHandler& handler, SessionConfig config) : socket(socket), handler(handler), sbuf(socket, *this), os(&sbuf), config(config) {}
 
     struct DisconnectHandler {
-        Session &session;
+        Session& session;
         SessionHandler& handler;
-        DisconnectHandler(Session &session, SessionHandler& handler) : session(session), handler(handler) {}
+        DisconnectHandler(Session& session, SessionHandler& handler) : session(session), handler(handler) {}
         ~DisconnectHandler() {
+            std::cout << "session disconnected " << session.id() << "\n";
             handler.onDisconnected(session);
         }
     };
@@ -82,7 +88,8 @@ protected:
         fullMsg.addTimeNow(52);
         config.initialize(fullMsg);
         fullMsg.addBuilder(msg);
-        fullMsg.writeTo(socket);
+        fullMsg.writeTo(os);
+        os.flush();
     }
     std::string id() const {
         return config.id();
@@ -94,14 +101,15 @@ class Acceptor : public SessionHandler {
     int serverSocket;
     std::shared_mutex sessionLock;
     std::map<std::string, Session*> sessionMap;
-    std::vector<std::thread*> threads;
+    std::vector<boost::fibers::fiber*> fibers;
     SessionConfig config;
     void put(Session* session) {
         std::unique_lock<std::shared_mutex> mu(sessionLock);
         sessionMap[session->config.id()] = session;
     }
-    protected:
+    Poller poller;
 
+   protected:
    public:
     Acceptor(int port, SessionConfig config) : port(port), config(config) {}
     // The message should be sent should not contain any of the header or trailer fields.
@@ -118,8 +126,13 @@ class Acceptor : public SessionHandler {
             std::cerr << "Session not found for " << sessionId << "\n";
         }
     }
+    // override to filter the incoming address. throw an exception to disallow the connection request.
     virtual void onConnected(struct sockaddr_in remote) {}
-    virtual void onDisconnected(const Session& session) {}
+    virtual void onDisconnected(const Session& session) {
+        poller.remove_socket(session.socket);
+        std::unique_lock<std::shared_mutex> mu(sessionLock);
+        sessionMap.erase(session.config.id());
+    }
     virtual void onLoggedOn(const Session& session) {
         put(const_cast<Session*>(&session));
     }
@@ -132,30 +145,34 @@ class Acceptor : public SessionHandler {
 };
 
 class Initiator : public SessionHandler {
-    int socket;
     bool connected = false;
     const sockaddr_in server;
     Session* session = nullptr;
     const SessionConfig config;
+    int socket;
+    Poller *poller;
 
    public:
     Initiator(struct sockaddr_in server, const SessionConfig config) : server(server), config(config) {}
-    ~Initiator() {
-        if (session != nullptr) delete session;
+    virtual ~Initiator() {
+        if (session && session->fiber) session->fiber->join();
+        if (session) delete session;
     }
     // The message should be sent should not contain any of the header or trailer fields.
     // The msg is automatically reset.
     void sendMessage(const std::string& msgType, FixBuilder& msg) {
-        session->sendMessage(msgType,msg);
+        session->sendMessage(msgType, msg);
     }
-    void connect();
+    void connect(bool nonBlocking=false,Poller *poller=nullptr);
     bool isConnected() {
         return connected;
     }
     void disconnect();
-    void handle();
-    virtual void onConnected(){}
-    virtual void onDisconnected(const Session& session) {}
+    void handle(bool nonBlocking=false);
+    virtual void onConnected() {}
+    virtual void onDisconnected(const Session& session) {
+        if(poller) poller->remove_socket(socket);
+    }
     virtual void onLoggedOn(const Session& session) {}
     virtual void onLoggedOut(const Session& session, const std::string_view& text) {}
     virtual void onMessage(Session& session, const FixMessage& msg) {}

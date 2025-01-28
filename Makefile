@@ -1,7 +1,7 @@
 CXX = clang++
-INCLUDES = -I ../cpp_fix_codec -I ../cpp_fixed
+INCLUDES = -I ../cpp_fix_codec -I ../cpp_fixed -lboost_fiber -lboost_context
 
-# CXXFLAGS = -std=c++20 -O0 -Wall -fsanitize=address -fno-omit-frame-pointer -pedantic-errors -g ${INCLUDES}
+# CXXFLAGS = -std=c++20 -O0 -Wall -fsanitize=address -fno-omit-frame-pointer -pedantic-errors -g ${INCLUDES} 
 # CXXFLAGS = -std=c++20 -Wall -pedantic-errors -g ${INCLUDES}
 CXXFLAGS = -std=c++20 -O3 -Wall -pedantic-errors -g ${INCLUDES}
 # CXXFLAGS = -std=c++20 -O3 -fprofile-generate -Wall -pedantic-errors -g ${INCLUDES}
@@ -38,7 +38,7 @@ run_tests: ${TEST_MAINS}
 ${LIB}: ${OBJS}
 	ar r ${LIB} ${OBJS}
 
-${SAMPLE_MAINS}: ${SAMPLE_OBJS} ${LIB} ${FIX_CODEC}
+bin/sample_%: bin/sample_%.o ${LIB} ${FIX_CODEC}
 	${CXX} ${CXXFLAGS} $@.o ${LIB} ${FIX_CODEC} -o $@
 
 bin/%_test: bin/%_test.o ${LIB} ${FIX_CODEC}
