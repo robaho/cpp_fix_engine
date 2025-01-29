@@ -208,11 +208,11 @@ void Initiator::connect() {
         perror("socket connect");
         return;
     }
+    
     int flag = 1;
     if (setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag)) < 0) {
         perror("unable to set TCP_NODELAY");
     }
-    std::cout << "connected\n";
 
     session = new Session(socket, *this, config);
 

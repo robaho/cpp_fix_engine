@@ -145,8 +145,10 @@ int main(int argc, char *argv[]) {
                     struct SessionConfig sessionConfig("CLIENT_"+symbol, config::TARGET_COMP_ID);
                     auto client = new MyClient(server,symbol,sessionConfig,latch,&poller);
                     client->connect();
-                    std::cout << "client connected\n";
-                    client->handle();
+                    if(client->isConnected()) {
+                        std::cout << "client connected\n";
+                        client->handle();
+                    }
                 }
             }));
         }
@@ -206,8 +208,10 @@ int main(int argc, char *argv[]) {
         struct SessionConfig sessionConfig("CLIENT_"+symbol, config::TARGET_COMP_ID);
         MyClient client(server,symbol,sessionConfig,latch);
         client.connect();
-        std::cout << "client connected\n";
-        client.handle();
+        if(client.isConnected()) {
+            std::cout << "client connected\n";
+            client.handle();
+        }
         reporter.join();
     }
 }

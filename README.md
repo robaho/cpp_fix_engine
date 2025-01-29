@@ -25,8 +25,21 @@ The fix messages declared in the project are samples for demonstration purposes.
 
 ## Performance
 
-Using a 4 GHz Quad-Core Intel Core i7:
+Using a 4 GHz Quad-Core Intel Core i7, and the Boost Fibers for server and clients.
 
-40k round-trip quote messages (single double-sided qoute) + ack per second on localhost. (ping pong i.e. wait for ack, not streaming).
+160k+ round-trip quote messages (single double-sided qoute) + ack per second on localhost. (ping pong i.e. wait for ack, not streaming).
+
+```
+$bin/sample_client localhost -bench 75
+round-trip 811924 quotes, usec per quote 6.16218, quotes per sec 162280
+```
 
 Over-the-network timings coming soon.
+
+## Design notes
+
+There are two main branches: `thread_per_session` and `fibers`. The latter uses [Boost Fibers](https://live.boost.org/doc/libs/1_87_0/libs/fiber/doc/html/fiber/fiber_mgmt.html), and the former a platform thread per FIX session.
+
+The `main` branch uses fibers as the performance was much better.
+
+The `Initiator` uses a platform thread by default, but can be configured to use fibers by passing a `Poller` to the constructor. See the `sample_client` and `-bench` support for using multiple FIX initiators sharing Boost Fibers.
