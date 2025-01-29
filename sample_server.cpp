@@ -3,7 +3,7 @@
 
 class MyServer : public Acceptor {
 public:
-    MyServer() : Acceptor(9000,SessionConfig("SERVER","*")){};
+    MyServer() : Acceptor(9000,SessionConfig("SERVER","*"),std::max(int(std::thread::hardware_concurrency()/2),1)){};
     void onMessage(Session& session,const FixMessage& msg) {
         if(msg.msgType()==MassQuote::msgType) {
             FixBuilder fix(256);

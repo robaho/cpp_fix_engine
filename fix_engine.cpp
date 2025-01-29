@@ -40,18 +40,18 @@ void Acceptor::listen() {
     }
 
     typedef boost::fibers::buffered_channel<Session*> channel_t;
-
     channel_t chan{2};
 
-    std::cout << "starting worker threads\n";
+    std::cout << "starting " << workerThreads << " worker threads\n";
+    std::vector<std::thread> workers;
 
-    auto worker = std::thread(
-            [&chan]{
-                std::cout << "worker thread " << std::this_thread::get_id() << "\n";
-                boost::fibers::use_scheduling_algorithm<boost::fibers::algo::round_robin>();
+    for(int i=0;i<workerThreads;i++) {
+        workers.push_back(std::thread(
+            [&chan,this]{
+                boost::fibers::use_scheduling_algorithm<boost::fibers::algo::work_stealing>(workerThreads,true);
                 // wait till all threads joining the work stealing have been registered
-                Session* session;
                 while(true) {
+                    Session* session;
                     if(chan.pop(session)!=boost::fibers::channel_op_status::success) {
                         return;
                     }
@@ -59,7 +59,8 @@ void Acceptor::listen() {
                     session->fiber = fiber;
                     fiber->detach();
                 }
-            });
+            }));
+    }
 
     std::cout << "starting poller\n";
     std::thread poller_thread([this]() {
@@ -126,7 +127,7 @@ void Acceptor::listen() {
         fiber->join();
         delete fiber;
     }
-    worker.join();
+    for(auto& worker : workers) worker.join();
     poller.close();
     poller_thread.join();
 }
@@ -197,11 +198,12 @@ void Session::handle() {
     }
 }
 
-void Initiator::connect(bool nonBlocking,Poller *poller) {
+void Initiator::connect() {
     if ((socket = ::socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("socket failed");
         return;
     }
+    std::cout << "connecting...\n";
     if (::connect(socket, (struct sockaddr *)&server, sizeof(server)) < 0) {
         perror("socket connect");
         return;
@@ -210,18 +212,17 @@ void Initiator::connect(bool nonBlocking,Poller *poller) {
     if (setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag)) < 0) {
         perror("unable to set TCP_NODELAY");
     }
+    std::cout << "connected\n";
 
     session = new Session(socket, *this, config);
 
-    if(nonBlocking) {
-        if(poller==nullptr) throw std::runtime_error("cannot use non-blocking without Poller instance");
+    if(poller) {
         int flags = fcntl(socket, F_GETFL, 0);
         if(fcntl(socket, F_SETFL, flags | O_NONBLOCK)<0) {
             perror("unable to set O_NONBLOCK");
             close(socket);
             return;
         }
-        this->poller = poller;
         poller->add_socket(socket, session, [](struct kevent &event, void *data) {
             auto session = static_cast<Session *>(data);
             if (event.flags & EV_EOF) {
@@ -234,8 +235,8 @@ void Initiator::connect(bool nonBlocking,Poller *poller) {
     onConnected();
 }
 
-void Initiator::handle(bool nonBlocking) {
-    if(nonBlocking) {
+void Initiator::handle() {
+    if(poller) {
         auto fiber = new boost::fibers::fiber(&Session::handle, session);
         session->fiber = fiber;
         return;

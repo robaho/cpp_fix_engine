@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <stdexcept>
+#include <algorithm>
 
 #include "fix_engine.h"
 #include "msg_logon.h"
@@ -20,6 +21,8 @@ static const int PORT = 9000;                  // 5001 to talk with go-trader, o
 #endif
 }
 
+static std::atomic<long> quoteCount = 0;
+
 class MyClient : public Initiator {
     static const int N_QUOTES = 10000;
 
@@ -30,12 +33,11 @@ class MyClient : public Initiator {
     F bidQty = 10;
     F askQty = 10;
     std::string symbol;
-    long quotes = 0;
     std::chrono::time_point<std::chrono::system_clock> start;
     std::latch& latch;
 
    public:
-    MyClient(sockaddr_in &server,std::string symbol,SessionConfig sessionConfig,std::latch& latch) : Initiator(server, sessionConfig), symbol(symbol),latch(latch) {};
+    MyClient(sockaddr_in &server,std::string symbol,SessionConfig sessionConfig,std::latch& latch,Poller* poller=nullptr) : Initiator(server, sessionConfig, poller), symbol(symbol), latch(latch) {};
     void onConnected() override {
         std::cout << "client connected!, sending logon\n";
         Logon::build(fix);
@@ -53,18 +55,7 @@ class MyClient : public Initiator {
 
             MassQuote::build(fix, "MyQuote", "MyQuoteEntry",symbol, bidPrice, bidQty, askPrice, askQty);
             sendMessage(MassQuote::msgType, fix);
-            if (++quotes % N_QUOTES == 0) {
-                auto end = std::chrono::system_clock::now();
-                auto duration =
-                    std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-
-                std::cout << "round-trip " << N_QUOTES << " " << symbol << " quotes, usec per quote "
-                          << (duration.count() / (double)(N_QUOTES)) << ", quotes per sec "
-                          << (int)(((N_QUOTES) / (duration.count() / 1000000.0))) 
-                          << ", last spread " << bidPrice << "/" << askPrice << "\n";
-
-                start = std::chrono::system_clock::now();
-            }
+            quoteCount+=1;
         }
     }
     bool validateLogon(const FixMessage &logon) override { return true; }
@@ -131,32 +122,92 @@ int main(int argc, char *argv[]) {
             }
         });
         std::vector<MyClient*> clients;
+        int workerThreads = std::max(int(std::thread::hardware_concurrency()) / 2,1);
+
+        std::vector<std::thread> workers;
+
         boost::fibers::use_scheduling_algorithm<boost::fibers::algo::round_robin>();
+
+        typedef boost::fibers::buffered_channel<std::string> channel_t;
+        channel_t chan{2};
+
         std::latch latch(benchCount);
+
+        for(int i=0;i<workerThreads;i++) {
+            workers.push_back(
+            std::thread([&chan,&server,&poller,&latch,workerThreads]() {
+                boost::fibers::use_scheduling_algorithm<boost::fibers::algo::work_stealing>(workerThreads,true);
+                while(true) {
+                    std::string symbol;
+                    if(chan.pop(symbol)!=boost::fibers::channel_op_status::success) {
+                        return;
+                    }
+                    struct SessionConfig sessionConfig("CLIENT_"+symbol, config::TARGET_COMP_ID);
+                    auto client = new MyClient(server,symbol,sessionConfig,latch,&poller);
+                    client->connect();
+                    std::cout << "client connected\n";
+                    client->handle();
+                }
+            }));
+        }
+        auto reporter = boost::fibers::fiber(
+        [&latch]() {
+            while(!latch.try_wait()) {
+                auto start = std::chrono::system_clock::now();
+                long startCount = quoteCount;
+                boost::this_fiber::sleep_for(std::chrono::seconds(5));
+                auto end = std::chrono::system_clock::now();
+                long nQuotes = quoteCount-startCount;
+                auto duration =
+                    std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+                std::cout << "round-trip " << nQuotes << " quotes, usec per quote "
+                          << (duration.count() / (double)(nQuotes)) << ", quotes per sec "
+                          << (int)(((nQuotes) / (duration.count() / 1000000.0))) << "\n";
+
+            }
+        });
+
         for(int i=0;i<benchCount;i++) {
             auto symbol = std::string("S")+std::to_string(i);
-            struct SessionConfig sessionConfig("CLIENT_"+symbol, config::TARGET_COMP_ID);
-            auto client = new MyClient(server,symbol,sessionConfig,latch);
-            clients.push_back(client);
-            client->connect(true,&poller);
-            std::cout << "client connected\n";
-            client->handle(true);
+            chan.push(symbol);
         }
+
         while(!latch.try_wait()) {
             boost::this_fiber::sleep_for(std::chrono::milliseconds(1000));
         }
 
+        chan.close();
+        reporter.join();
+        
         poller.close();
         pollerThread.join();
 
+        for(auto& worker : workers) worker.join();
         for(auto client : clients) delete client;
         std::cout << "all clients disconnected\n";
     } else {
         std::latch latch(1);
+        auto reporter = std::thread([&latch,symbol]() {
+            while(!latch.try_wait()) {
+                auto start = std::chrono::system_clock::now();
+                long startCount = quoteCount;
+                boost::this_fiber::sleep_for(std::chrono::seconds(5));
+                auto end = std::chrono::system_clock::now();
+                long nQuotes = quoteCount-startCount;
+                auto duration =
+                    std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+                std::cout << "round-trip " << nQuotes << " quotes on " << symbol << ", usec per quote "
+                          << (duration.count() / (double)(nQuotes)) << ", quotes per sec "
+                          << (int)(((nQuotes) / (duration.count() / 1000000.0))) << "\n";
+            }
+        });
         struct SessionConfig sessionConfig("CLIENT_"+symbol, config::TARGET_COMP_ID);
         MyClient client(server,symbol,sessionConfig,latch);
         client.connect();
         std::cout << "client connected\n";
         client.handle();
+        reporter.join();
     }
 }

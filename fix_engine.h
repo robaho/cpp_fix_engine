@@ -103,15 +103,12 @@ class Acceptor : public SessionHandler {
     std::map<std::string, Session*> sessionMap;
     std::vector<boost::fibers::fiber*> fibers;
     SessionConfig config;
-    void put(Session* session) {
-        std::unique_lock<std::shared_mutex> mu(sessionLock);
-        sessionMap[session->config.id()] = session;
-    }
     Poller poller;
+    int workerThreads;
 
    protected:
    public:
-    Acceptor(int port, SessionConfig config) : port(port), config(config) {}
+    Acceptor(int port, SessionConfig config, int workerThreads=1) : port(port), config(config), workerThreads(workerThreads) {}
     // The message should be sent should not contain any of the header or trailer fields.
     // The msg is automatically reset.
     void sendMessage(const std::string& sessionId, const std::string& msgType, FixBuilder& msg) {
@@ -134,7 +131,8 @@ class Acceptor : public SessionHandler {
         sessionMap.erase(session.config.id());
     }
     virtual void onLoggedOn(const Session& session) {
-        put(const_cast<Session*>(&session));
+        std::unique_lock<std::shared_mutex> mu(sessionLock);
+        sessionMap[session.config.id()] = const_cast<Session*>(&session);
     }
     // Listen for initiators. Function does not return until shutdown() is called.
     void listen();
@@ -150,10 +148,11 @@ class Initiator : public SessionHandler {
     Session* session = nullptr;
     const SessionConfig config;
     int socket;
+   protected:
     Poller *poller;
 
    public:
-    Initiator(struct sockaddr_in server, const SessionConfig config) : server(server), config(config) {}
+    Initiator(struct sockaddr_in server, const SessionConfig config, Poller* poller = nullptr) : server(server), config(config), poller(poller) {}
     virtual ~Initiator() {
         if (session && session->fiber) session->fiber->join();
         if (session) delete session;
@@ -163,12 +162,12 @@ class Initiator : public SessionHandler {
     void sendMessage(const std::string& msgType, FixBuilder& msg) {
         session->sendMessage(msgType, msg);
     }
-    void connect(bool nonBlocking=false,Poller *poller=nullptr);
+    void connect();
     bool isConnected() {
         return connected;
     }
     void disconnect();
-    void handle(bool nonBlocking=false);
+    void handle();
     virtual void onConnected() {}
     virtual void onDisconnected(const Session& session) {
         if(poller) poller->remove_socket(socket);
