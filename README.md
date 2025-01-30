@@ -11,7 +11,10 @@ It uses [cpp_fix_codec](https://github.com/robaho/cpp_fix_codec) to perform low-
 
 ## Building
 
-Clone the [cpp_fix_codec](https://github.com/robaho/cpp_fix_codec) project at the same directory level. Run `make all` in the `cpp_fix_codec` project.
+Requires:
+- [cpp_fixed](https://github.com/robaho/cpp_fixed) 
+- [cpp_fix_codec](https://github.com/robaho/cpp_fix_codec)
+to be available and built at the same directory level.
 
 The project builds by default using `make` and CLang. There is a `Makefile.gcc` for building using GCC.
 
@@ -43,3 +46,12 @@ There are two main branches: `thread_per_session` and `fibers`. The latter uses 
 The `main` branch uses fibers as the performance was much better.
 
 The `Initiator` uses a platform thread by default, but can be configured to use fibers by passing a `Poller` to the constructor. See the `sample_client` and `-bench` support for using multiple FIX initiators sharing Boost Fibers.
+
+## Testing
+
+- use `make run_tests` to run the unit tests.
+- use `bin/sample_server` to launch the server process.
+- use `bin/sample_client <host> <symbol>` to mass quote the symbol against the server.
+- use `bin/sample_client <host> -bench <count>` to mass quote `<quote>` symbols against the server.
+
+
