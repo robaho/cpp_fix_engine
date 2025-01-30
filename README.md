@@ -11,7 +11,7 @@ It uses [cpp_fix_codec](https://github.com/robaho/cpp_fix_codec) to perform low-
 
 ## Building
 
-Clone the `[cpp_fix_codec](https://github.com/robaho/cpp_fix_codec)` project at the same directory level. Run `make all` in the `cpp_fix_codec` project.
+Clone the [cpp_fix_codec](https://github.com/robaho/cpp_fix_codec) project at the same directory level. Run `make all` in the `cpp_fix_codec` project.
 
 The project builds by default using `make` and CLang. There is a `Makefile.gcc` for building using GCC.
 
