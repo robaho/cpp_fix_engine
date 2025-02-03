@@ -23,7 +23,7 @@ static const int PORT = 9000;                  // 5001 to talk with go-trader, o
 
 static std::atomic<long> quoteCount = 0;
 
-class MyClient : public Initiator {
+class MyClient : public Initiator<> {
     static const int N_QUOTES = 10000;
 
     FixBuilder fix;
@@ -37,13 +37,13 @@ class MyClient : public Initiator {
     std::latch& latch;
 
    public:
-    MyClient(sockaddr_in &server,std::string symbol,SessionConfig sessionConfig,std::latch& latch,Poller* poller=nullptr) : Initiator(server, sessionConfig, poller), symbol(symbol), latch(latch) {};
+    MyClient(sockaddr_in &server,std::string symbol,DefaultSessionConfig sessionConfig,std::latch& latch,Poller* poller=nullptr) : Initiator(server, sessionConfig, poller), symbol(symbol), latch(latch) {};
     void onConnected() override {
         std::cout << "client connected!, sending logon\n";
         Logon::build(fix);
         sendMessage(Logon::msgType, fix);
     }
-    void onMessage(Session &session, const FixMessage &msg) override {
+    void onMessage(Session<> &session, const FixMessage &msg) override {
         if (msg.msgType() == MassQuoteAck::msgType) {
             double adjust = rand() % 2 == 0 ? 0.01 : -0.01;
 
@@ -59,17 +59,17 @@ class MyClient : public Initiator {
         }
     }
     bool validateLogon(const FixMessage &logon) override { return true; }
-    void onLoggedOn(const Session &session) override {
+    void onLoggedOn(const Session<> &session) override {
         std::cout << "client logged in!\n";
 
         start = std::chrono::system_clock::now();
         MassQuote::build(fix, "MyQuote","MyQuoteEntry",symbol, bidPrice, bidQty, askPrice, askQty);
         sendMessage(MassQuote::msgType, fix);
     }
-    void onLoggedOut(const Session &session, const std::string_view &text) override {
+    void onLoggedOut(const Session<> &session, const std::string_view &text) override {
         std::cout << "client logged out " << text << "\n";
     }
-    void onDisconnected(const Session& session) override {
+    void onDisconnected(const Session<>& session) override {
         latch.count_down();
         Initiator::onDisconnected(session);
     }
@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
                     if(chan.pop(symbol)!=boost::fibers::channel_op_status::success) {
                         return;
                     }
-                    struct SessionConfig sessionConfig("CLIENT_"+symbol, config::TARGET_COMP_ID);
+                    struct DefaultSessionConfig sessionConfig("CLIENT_"+symbol, config::TARGET_COMP_ID);
                     auto client = new MyClient(server,symbol,sessionConfig,latch,&poller);
                     client->connect();
                     if(client->isConnected()) {
@@ -205,7 +205,7 @@ int main(int argc, char *argv[]) {
                           << (int)(((nQuotes) / (duration.count() / 1000000.0))) << "\n";
             }
         });
-        struct SessionConfig sessionConfig("CLIENT_"+symbol, config::TARGET_COMP_ID);
+        struct DefaultSessionConfig sessionConfig("CLIENT_"+symbol, config::TARGET_COMP_ID);
         MyClient client(server,symbol,sessionConfig,latch);
         client.connect();
         if(client.isConnected()) {

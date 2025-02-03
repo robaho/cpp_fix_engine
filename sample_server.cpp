@@ -1,10 +1,10 @@
 #include "fix_engine.h"
 #include "msg_massquote.h"
 
-class MyServer : public Acceptor {
+class MyServer : public Acceptor<> {
 public:
-    MyServer() : Acceptor(9000,SessionConfig("SERVER","*"),std::max(int(std::thread::hardware_concurrency()/2),1)){};
-    void onMessage(Session& session,const FixMessage& msg) {
+    MyServer() : Acceptor(9000,DefaultSessionConfig("SERVER","*"),std::max(int(std::thread::hardware_concurrency()/2),1)){};
+    void onMessage(Session<>& session,const FixMessage& msg) {
         if(msg.msgType()==MassQuote::msgType) {
             FixBuilder fix(256);
             MassQuoteAck::build(fix,msg.getString(117),0);

@@ -26,7 +26,7 @@ struct Config {
     int timeout_seconds;
 };
 
-class MyClient : public Initiator {
+class MyClient : public Initiator<> {
     static const int N_QUOTES = 100000;
 
     FixBuilder fix;
@@ -34,13 +34,13 @@ class MyClient : public Initiator {
     long exchangeId;
 
    public:
-    MyClient(sockaddr_in &server,SessionConfig sessionConfig,Config config) : Initiator(server, sessionConfig), config(config) {};
+    MyClient(sockaddr_in &server,DefaultSessionConfig sessionConfig,Config config) : Initiator(server, sessionConfig), config(config) {};
     void onConnected() {
         std::cout << "client connected!, sending logon\n";
         Logon::build(fix);
         sendMessage(Logon::msgType, fix);
     }
-    void onMessage(Session &session, const FixMessage &msg) {
+    void onMessage(Session<DefaultSessionConfig> &session, const FixMessage &msg) {
         if (msg.msgType() == ExecutionReport::msgType) {
             exchangeId = msg.getLong(37);
             std::cout << "received execution report:" << msg << "\n";
@@ -58,14 +58,14 @@ class MyClient : public Initiator {
         }
     }
     bool validateLogon(const FixMessage &logon) { return true; }
-    void onLoggedOn(const Session &session) {
+    void onLoggedOn(const Session<DefaultSessionConfig> &session) {
         std::cout << "client logged in!\n";
         std::cout << "sending buy order: " << config.symbol << " " << config.price << " " << config.quantity << "\n";
 
         NewOrderSingle::build<7>(fix, config.symbol, OrderType::Limit, OrderSide::Buy, config.price, config.quantity, "MyOrder");
         sendMessage(NewOrderSingle::msgType, fix);
     }
-    void onLoggedOut(const Session &session, const std::string_view &text) {
+    void onLoggedOut(const Session<DefaultSessionConfig> &session, const std::string_view &text) {
         std::cout << "client logged out " << text << "\n";
     }
     void cancelOrder() {
@@ -102,7 +102,7 @@ int main(int argc, char *argv[]) {
     server.sin_port = htons(config::PORT);
     server.sin_family = AF_INET;
 
-    struct SessionConfig sessionConfig("SENDORDER_"+config.symbol, config::TARGET_COMP_ID);
+    struct DefaultSessionConfig sessionConfig("SENDORDER_"+config.symbol, config::TARGET_COMP_ID);
 
     MyClient client(server, sessionConfig, config);
     std::thread clientThread([&client]() {

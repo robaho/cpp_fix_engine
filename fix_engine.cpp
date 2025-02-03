@@ -1,19 +1,24 @@
+#include "fix_engine.h"
+
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 
+#include <cerrno>
+#include <chrono>
+#include <cstdio>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <thread>
 
 #include "fix.h"
-#include "fix_engine.h"
 #include "msg_logon.h"
 #include "msg_logout.h"
 #include "socketbuf.h"
 
-void Acceptor::listen() {
+template <class SessionConfig>
+void Acceptor<SessionConfig>::listen() {
     if ((serverSocket = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("socket failed");
         return;
@@ -39,28 +44,34 @@ void Acceptor::listen() {
         return;
     }
 
-    typedef boost::fibers::buffered_channel<Session*> channel_t;
+    typedef boost::fibers::buffered_channel<Session<SessionConfig> *> channel_t;
     channel_t chan{2};
+
+    workerThreads = std::max(workerThreads,1);
 
     std::cout << "starting " << workerThreads << " worker threads\n";
     std::vector<std::thread> workers;
 
-    for(int i=0;i<workerThreads;i++) {
+    boost::fibers::barrier b(workerThreads+1);
+
+    for (int i = 0; i < workerThreads; i++) {
         workers.push_back(std::thread(
-            [&chan,this]{
-                boost::fibers::use_scheduling_algorithm<boost::fibers::algo::work_stealing>(workerThreads,true);
-                // wait till all threads joining the work stealing have been registered
-                while(true) {
-                    Session* session;
-                    if(chan.pop(session)!=boost::fibers::channel_op_status::success) {
+            [&chan, &b] {
+                boost::fibers::use_scheduling_algorithm<boost::fibers::algo::shared_work>(true);
+                // wait till all threads joined the shared pool
+                b.wait();
+                while (true) {
+                    Session<SessionConfig> *session;
+                    if (chan.pop(session) != boost::fibers::channel_op_status::success) {
                         return;
                     }
-                    auto fiber = new boost::fibers::fiber(&Session::handle, session);
-                    session->fiber = fiber;
-                    fiber->detach();
+                    auto fiber = boost::fibers::fiber(&Session<SessionConfig>::handle, session);
+                    fiber.detach();
                 }
             }));
     }
+    // wait till all threads joined the shared pool
+    b.wait();
 
     std::cout << "starting poller\n";
     std::thread poller_thread([this]() {
@@ -73,9 +84,8 @@ void Acceptor::listen() {
             }
         }
     });
-    poller_thread.detach();
 
-    std::cout << "listening for connections on port " << port<< "\n";
+    std::cout << "listening for connections on port " << port << "\n";
     if (::listen(serverSocket, 5) < 0) {  // 5 is the backlog size
         std::cerr << "error listening for connections" << std::endl;
         return;
@@ -88,7 +98,8 @@ void Acceptor::listen() {
 
         int clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &clientAddrLen);
         if (clientSocket < 0) {
-            std::cerr << "error accepting connection" << std::endl;
+            if(errno==EBADF) break;
+            perror("error accepting connection");
             continue;
         }
 
@@ -98,21 +109,21 @@ void Acceptor::listen() {
         }
 
         int flags = fcntl(clientSocket, F_GETFL, 0);
-        if(fcntl(clientSocket, F_SETFL, flags | O_NONBLOCK)<0) {
+        if (fcntl(clientSocket, F_SETFL, flags | O_NONBLOCK) < 0) {
             perror("unable to set O_NONBLOCK");
             close(clientSocket);
             continue;
         }
 
         inet_ntop(AF_INET, &(clientAddr.sin_addr), ip_str, INET_ADDRSTRLEN);
-        std::cout << "connection from " << ip_str << " port " << ntohs(clientAddr.sin_port) << " on thread " << std::this_thread::get_id()<< "\n";
+        std::cout << "connection from " << ip_str << " port " << ntohs(clientAddr.sin_port) << " on thread " << std::this_thread::get_id() << "\n";
         try {
             auto session = new Session(clientSocket, *this, config);
             chan.push(session);
 
             onConnected(clientAddr);
             poller.add_socket(clientSocket, session, [](struct kevent &event, void *data) {
-                auto session = static_cast<Session *>(data);
+                auto session = static_cast<Session<SessionConfig> *>(data);
                 if (event.flags & EV_EOF) {
                     close(session->socket);
                 }
@@ -122,19 +133,36 @@ void Acceptor::listen() {
             std::cerr << "acceptor refused connection: " << err.what() << "\n";
         }
     }
-    // wait for all sessions to finish
-    for(auto fiber : fibers) {
-        fiber->join();
-        delete fiber;
+    // close the sockets for any active sessions
+    {
+        std::unique_lock<std::shared_mutex> lu(sessionLock);
+        for(auto entry : sessionMap) {
+            close(entry.second->socket);
+            entry.second->unpark();
+        }
     }
-    for(auto& worker : workers) worker.join();
+
+    // wait for sessions to terminate
+    while(true) {
+        {
+            std::unique_lock<std::shared_mutex> lu(sessionLock);
+            if(sessionMap.empty()) break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
+
     poller.close();
     poller_thread.join();
+
+    chan.close();
+
+    for (auto &worker : workers) worker.join();
 }
 
-void Session::handle() {
+template <class SessionConfig>
+void Session<SessionConfig>::handle() {
     DisconnectHandler disconnectHandler(*this, handler);
-    Socketbuf sbuf(socket,*this);
+    Socketbuf sbuf(socket, *this);
     std::istream is(&sbuf);
     FixMessage msg;
     FixBuilder out;
@@ -142,7 +170,9 @@ void Session::handle() {
         // std::cout << "handling session " << config << " on thread " << std::this_thread::get_id()<<"\n";
         while (true) {
             FixMessage::parse(is, msg, GroupDefs());
-            if (is.eof()) return;
+            if (is.eof()) {
+                return;
+            }
 
             if (!loggedIn && msg.msgType() != Logon::msgType) {
                 std::cerr << "rejecting connection, " << msg.msgType() << " is not a Logon\n";
@@ -183,6 +213,7 @@ void Session::handle() {
                     sendMessage(Logout::msgType, out);
                     return;
                 }
+                config.initialize(msg);
                 Logon::build(out);
                 sendMessage(Logon::msgType, out);
                 loggedIn = true;
@@ -198,7 +229,8 @@ void Session::handle() {
     }
 }
 
-void Initiator::connect() {
+template <class SessionConfig>
+void Initiator<SessionConfig>::connect() {
     if ((socket = ::socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("socket failed");
         return;
@@ -208,7 +240,7 @@ void Initiator::connect() {
         perror("socket connect");
         return;
     }
-    
+
     int flag = 1;
     if (setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag)) < 0) {
         perror("unable to set TCP_NODELAY");
@@ -216,36 +248,24 @@ void Initiator::connect() {
 
     session = new Session(socket, *this, config);
 
-    if(poller) {
+    if (poller) {
         int flags = fcntl(socket, F_GETFL, 0);
-        if(fcntl(socket, F_SETFL, flags | O_NONBLOCK)<0) {
+        if (fcntl(socket, F_SETFL, flags | O_NONBLOCK) < 0) {
             perror("unable to set O_NONBLOCK");
             close(socket);
             return;
         }
         poller->add_socket(socket, session, [](struct kevent &event, void *data) {
-            auto session = static_cast<Session *>(data);
+            auto session = static_cast<Session<SessionConfig> *>(data);
             if (event.flags & EV_EOF) {
                 close(session->socket);
             }
             session->unpark();
         });
     }
-    connected=true;
+    connected = true;
     onConnected();
 }
 
-void Initiator::handle() {
-    if(poller) {
-        auto fiber = new boost::fibers::fiber(&Session::handle, session);
-        session->fiber = fiber;
-        return;
-    } else {
-        session->handle();
-    }
-}
-
-void Initiator::disconnect() {
-    close(socket);
-    connected = false;
-}
+template void Acceptor<DefaultSessionConfig>::listen();
+template void Initiator<DefaultSessionConfig>::connect();
